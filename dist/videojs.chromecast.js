@@ -229,7 +229,11 @@
           return this.paused = true;
         case chrome.cast.media.PlayerState.PLAYING:
           this.updateCastingOverlay(this.apiSession.receiver.friendlyName, "Playing");
+          if (this.seeking) {
+            this.seeking = false;
+          }
           if (this.playTechOnChromecastPlay) {
+            this.player_.tech_.setMuted(true);
             this.player_.play();
             this.paused = false;
             this.playTechOnChromecastPlay = false;

@@ -168,6 +168,7 @@ class videojs.ChromecastComponent extends videojs.getComponent("Button")
         @paused = true
       when chrome.cast.media.PlayerState.PLAYING
         @updateCastingOverlay(@apiSession.receiver.friendlyName, "Playing")
+        @seeking = false if @seeking
         if @playTechOnChromecastPlay
           @player_.play()
           @paused = false
