@@ -123,12 +123,8 @@
       videojs.log("Cast APIs are available");
       appId = this.options.appId || chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID;
       sessionRequest = new chrome.cast.SessionRequest(appId);
-      apiConfig = new chrome.cast.ApiConfig(sessionRequest, this.sessionJoinedListener, this.receiverListener.bind(this));
+      apiConfig = new chrome.cast.ApiConfig(sessionRequest, this.sessionJoinedListener.bind(this), this.receiverListener.bind(this));
       return chrome.cast.initialize(apiConfig, this.onInitSuccess.bind(this), this.castError);
-    };
-
-    ChromecastComponent.prototype.sessionJoinedListener = function(session) {
-      return console.log("Session joined");
     };
 
     ChromecastComponent.prototype.receiverListener = function(availability) {
@@ -147,17 +143,30 @@
 
     ChromecastComponent.prototype.doLaunch = function() {
       videojs.log("Cast video: " + (this.player_.currentSrc()));
-      if (this.apiInitialized) {
+      if (this.apiSession) {
+        return this.loadAndPlayMedia();
+      } else if (this.apiInitialized) {
         return chrome.cast.requestSession(this.onSessionSuccess.bind(this), this.castError);
       } else {
         return videojs.log("Session not initialized");
       }
     };
 
+    ChromecastComponent.prototype.sessionJoinedListener = function(session) {
+      videojs.log("Session joined: " + session.sessionId);
+      this.apiSession = session;
+      return this.apiSession.addUpdateListener(this.onSessionUpdate.bind(this));
+    };
+
     ChromecastComponent.prototype.onSessionSuccess = function(session) {
-      var image, key, loadRequest, mediaInfo, ref, value;
       videojs.log("Session initialized: " + session.sessionId);
       this.apiSession = session;
+      this.loadAndPlayMedia();
+      return this.apiSession.addUpdateListener(this.onSessionUpdate.bind(this));
+    };
+
+    ChromecastComponent.prototype.loadAndPlayMedia = function() {
+      var image, key, loadRequest, mediaInfo, ref, value;
       this.addClass("connected");
       this.player_.addClass("vjs-chromecast-casting");
       this.updateCastingOverlay(this.apiSession.receiver.friendlyName, "Connected");
@@ -177,8 +186,7 @@
       loadRequest = new chrome.cast.media.LoadRequest(mediaInfo);
       loadRequest.autoplay = true;
       loadRequest.currentTime = this.player_.currentTime();
-      this.apiSession.loadMedia(loadRequest, this.onMediaDiscovered.bind(this), this.castError);
-      return this.apiSession.addUpdateListener(this.onSessionUpdate.bind(this));
+      return this.apiSession.loadMedia(loadRequest, this.onMediaDiscovered.bind(this), this.castError);
     };
 
     ChromecastComponent.prototype.onMediaDiscovered = function(media) {

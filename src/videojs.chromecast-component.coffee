@@ -69,12 +69,9 @@ class videojs.ChromecastComponent extends videojs.getComponent("Button")
     appId = @options.appId or chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
     sessionRequest = new chrome.cast.SessionRequest(appId)
 
-    apiConfig = new chrome.cast.ApiConfig(sessionRequest, @sessionJoinedListener, @receiverListener.bind(this))
+    apiConfig = new chrome.cast.ApiConfig(sessionRequest, @sessionJoinedListener.bind(this), @receiverListener.bind(this))
 
     chrome.cast.initialize apiConfig, @onInitSuccess.bind(this), @castError
-
-  sessionJoinedListener: (session) ->
-    console.log "Session joined"
 
   receiverListener: (availability) ->
     @show() if availability is "available"
@@ -87,15 +84,30 @@ class videojs.ChromecastComponent extends videojs.getComponent("Button")
 
   doLaunch: ->
     videojs.log "Cast video: #{@player_.currentSrc()}"
-    if @apiInitialized
+    if @apiSession
+      @loadAndPlayMedia()
+    else if @apiInitialized
       chrome.cast.requestSession @onSessionSuccess.bind(this), @castError
     else
       videojs.log "Session not initialized"
+
+  sessionJoinedListener: (session) ->
+    videojs.log "Session joined: #{session.sessionId}"
+
+    @apiSession = session
+
+    @apiSession.addUpdateListener @onSessionUpdate.bind(this)
 
   onSessionSuccess: (session) ->
     videojs.log "Session initialized: #{session.sessionId}"
 
     @apiSession = session
+
+    @loadAndPlayMedia()
+    
+    @apiSession.addUpdateListener @onSessionUpdate.bind(this)
+
+  loadAndPlayMedia: () ->
     @addClass "connected"
     @player_.addClass "vjs-chromecast-casting"
     @updateCastingOverlay(@apiSession.receiver.friendlyName, "Connected")
@@ -117,7 +129,6 @@ class videojs.ChromecastComponent extends videojs.getComponent("Button")
     loadRequest.currentTime = @player_.currentTime()
 
     @apiSession.loadMedia loadRequest, @onMediaDiscovered.bind(this), @castError
-    @apiSession.addUpdateListener @onSessionUpdate.bind(this)
 
   onMediaDiscovered: (media) ->
     @apiMedia = media

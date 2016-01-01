@@ -73,4 +73,5 @@
 }
 .vjs-chromecast-casting-to .casting-overlay .casting-information .casting-description .casting-subtext {
   font-size: 10px;
+  text-transform: uppercase;
 }
