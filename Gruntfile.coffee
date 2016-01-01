@@ -24,13 +24,11 @@ module.exports = ->
             "lang/*"
             "src/videojs.chromecast.coffee"
             "src/videojs.chromecast-component.coffee"
-            "src/videojs.chromecast-tech.coffee"
           ]
 
     uglify:
       options:
         compress:
-          drop_console: true
           pure_funcs: ["vjs.log"]
       dist:
         src: "dist/videojs.chromecast.js"

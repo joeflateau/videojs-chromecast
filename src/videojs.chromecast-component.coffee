@@ -1,4 +1,4 @@
-class vjs.ChromecastComponent extends vjs.Button
+class videojs.ChromecastComponent extends videojs.getComponent("Button")
   buttonText: "Chromecast"
   inactivityTimeout: 2000
 
@@ -15,26 +15,58 @@ class vjs.ChromecastComponent extends vjs.Button
   timer: null
   timerStep: 1000
 
-  constructor: (player, @settings) ->
-    super player, @settings
+  constructor: (@options, ready) ->
+    super @options, ready
 
-    @disable() unless player.controls()
+    @disable() unless @options.controls()
     @hide()
-    @initializeApi()
+    @initializeWhenApiReady()
+    @on "click", @onClick
+    @player_.on "play", () => @onPlay()
+    @player_.on "pause", () => @onPause()
+    @player_.on "seeked", () => @onSeeked()
+
+    @player_.ready () =>
+      @castingEl = @createCastingOverlayEl()
+      @castingReceiverText = @castingEl.getElementsByClassName("casting-receiver")[0]
+      @castingSubtextText = @castingEl.getElementsByClassName("casting-subtext")[0]
+
+  createCastingOverlayEl: ->
+    element = document.createElement "div"
+    element.className = "vjs-chromecast-casting-to"
+    element.innerHTML = """
+      <div class="casting-overlay">
+        <div class="casting-information">
+          <div class="casting-icon">&#58880</div>
+          <div class="casting-description">
+            <small>#{@localize "CASTING TO"}</small><br>
+            <span class="casting-receiver"></span>
+            <span class="casting-subtext"></span>
+          </div>
+        </div>
+      </div>
+    """
+    @player_.el_.insertBefore(element, @player_.controlBar.el_)
+    element
+
+  updateCastingOverlay: (receiver, status) ->
+    @castingReceiverText.innerHTML = receiver if receiver
+    @castingSubtextText.innerHTML = status if status
+
+  initializeWhenApiReady: ->
+    if chrome.cast and chrome.cast.isAvailable
+      @initializeApi()
+    else
+      oldOnApiAvailable = window['__onGCastApiAvailable']
+      window['__onGCastApiAvailable'] = (loaded, error) =>
+        if oldOnApiAvailable
+          oldOnApiAvailable(loaded, error)
+        @initializeApi()
 
   initializeApi: ->
-    # Check if the browser is Google Chrome
-    return unless vjs.IS_CHROME
+    videojs.log "Cast APIs are available"
 
-    # If the Cast APIs arent available yet, retry in 1000ms
-    if not chrome.cast or not chrome.cast.isAvailable
-      vjs.log "Cast APIs not available. Retrying..."
-      setTimeout @initializeApi.bind(@), 1000
-      return
-
-    vjs.log "Cast APIs are available"
-
-    appId = @settings.appId or chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
+    appId = @options.appId or chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID
     sessionRequest = new chrome.cast.SessionRequest(appId)
 
     apiConfig = new chrome.cast.ApiConfig(sessionRequest, @sessionJoinedListener, @receiverListener.bind(this))
@@ -51,27 +83,29 @@ class vjs.ChromecastComponent extends vjs.Button
     @apiInitialized = true
 
   castError: (castError) ->
-    vjs.log "Cast Error: #{JSON.stringify(castError)}"
+    videojs.log "Cast Error: #{JSON.stringify(castError)}"
 
   doLaunch: ->
-    vjs.log "Cast video: #{@player_.currentSrc()}"
+    videojs.log "Cast video: #{@player_.currentSrc()}"
     if @apiInitialized
       chrome.cast.requestSession @onSessionSuccess.bind(this), @castError
     else
-      vjs.log "Session not initialized"
+      videojs.log "Session not initialized"
 
   onSessionSuccess: (session) ->
-    vjs.log "Session initialized: #{session.sessionId}"
+    videojs.log "Session initialized: #{session.sessionId}"
 
     @apiSession = session
     @addClass "connected"
+    @player_.addClass "vjs-chromecast-casting"
+    @updateCastingOverlay(@apiSession.receiver.friendlyName, "Connected")
 
     mediaInfo = new chrome.cast.media.MediaInfo @player_.currentSrc(), @player_.currentType()
 
-    if @settings.metadata
+    if @options.metadata
       mediaInfo.metadata = new chrome.cast.media.GenericMediaMetadata()
 
-      for key, value of @settings.metadata
+      for key, value of @options.metadata
         mediaInfo.metadata[key] = value
 
       if @player_.options_.poster
@@ -91,16 +125,15 @@ class vjs.ChromecastComponent extends vjs.Button
 
     @startProgressTimer @incrementMediaTime.bind(this)
 
-    @player_.loadTech "ChromecastTech",
-      receiver: @apiSession.receiver.friendlyName
-
     @casting = true
-    @paused = @player_.paused()
+    @updateCastingOverlay(@apiSession.receiver.friendlyName, "Loading")
 
     # Always show the controlbar
     @inactivityTimeout = @player_.options_.inactivityTimeout
     @player_.options_.inactivityTimeout = 0
     @player_.userActive true
+
+    @playTechOnChromecastPlay = true
 
   onSessionUpdate: (isAlive) ->
     return unless @apiMedia
@@ -118,10 +151,17 @@ class vjs.ChromecastComponent extends vjs.Button
         @trigger "timeupdate"
         @onStopAppSuccess()
       when chrome.cast.media.PlayerState.PAUSED
+        @updateCastingOverlay(@apiSession.receiver.friendlyName, "Paused")
         return if @paused
         @player_.pause()
         @paused = true
       when chrome.cast.media.PlayerState.PLAYING
+        @updateCastingOverlay(@apiSession.receiver.friendlyName, "Playing")
+        if @playTechOnChromecastPlay
+          @player_.play()
+          @paused = false
+          @playTechOnChromecastPlay = false
+          return
         return unless @paused
         @player_.play()
         @paused = false
@@ -135,23 +175,26 @@ class vjs.ChromecastComponent extends vjs.Button
 
   play: ->
     return unless @apiMedia
+
     if @paused
       @apiMedia.play null, @mediaCommandSuccessCallback.bind(this, "Playing: " + @apiMedia.sessionId), @onError
       @paused = false
 
   pause: ->
     return unless @apiMedia
+    return if @seeking
 
     unless @paused
       @apiMedia.pause null, @mediaCommandSuccessCallback.bind(this, "Paused: " + @apiMedia.sessionId), @onError
       @paused = true
 
-  seekMedia: (position) ->
+  seekMedia: (position, forceResume) ->
     request = new chrome.cast.media.SeekRequest()
     request.currentTime = position
     # Make sure playback resumes. videoWasPlaying does not survive minification.
-    request.resumeState = chrome.cast.media.ResumeState.PLAYBACK_START if @player_.controlBar.progressControl.seekBar.videoWasPlaying
+    request.resumeState = chrome.cast.media.ResumeState.PLAYBACK_START if forceResume or @player_.controlBar.progressControl.seekBar.videoWasPlaying
 
+    @updateCastingOverlay(@apiSession.receiver.friendlyName, "Seeking")
     @apiMedia.seek request, @onSeekSuccess.bind(this, position), @onError
 
   onSeekSuccess: (position) ->
@@ -184,10 +227,10 @@ class vjs.ChromecastComponent extends vjs.Button
       clearInterval @timer
 
   mediaCommandSuccessCallback: (information, event) ->
-    vjs.log information
+    videojs.log information
 
   onError: ->
-    vjs.log "error"
+    videojs.log "error"
 
   # Stops the casting on the Chromecast
   stopCasting: ->
@@ -197,18 +240,8 @@ class vjs.ChromecastComponent extends vjs.Button
   onStopAppSuccess: ->
     clearInterval @timer
     @casting = false
+    @player_.removeClass "vjs-chromecast-casting"
     @removeClass "connected"
-
-    @player_.src @player_.options_["sources"]
-
-    # Resume playback if not paused when casting is stopped
-    unless @paused
-      @player_.one 'seeked', ->
-        @player_.play()
-    @player_.currentTime(@currentMediaTime)
-
-    # Hide the default HTML5 player controls.
-    @player_.tech.setControls(false)
 
     # Enable user activity timeout
     @player_.options_.inactivityTimeout = @inactivityTimeout
@@ -219,6 +252,25 @@ class vjs.ChromecastComponent extends vjs.Button
   buildCSSClass: ->
     super + "vjs-chromecast-button"
 
+  onPlay: () ->
+    return unless @casting
+    @play()
+
+  onPause: () ->
+    return unless @casting
+    @pause()
+
+  onSeeked: (e) ->
+    return unless @casting
+    currentTime = @player_.currentTime()
+    @player_.pause()
+    @playTechOnChromecastPlay = true
+    @seeking = true
+    @seekMedia(currentTime)
+
   onClick: ->
-    super
-    if @casting then @stopCasting() else @doLaunch()
+    if @casting
+      @stopCasting()
+    else
+      @player_.pause() 
+      @doLaunch()

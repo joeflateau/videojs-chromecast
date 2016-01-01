@@ -22,7 +22,7 @@
 }
 
 // ChromecastTech
-.vjs-tech-chromecast {
+.vjs-chromecast-casting-to {
   .casting-image {
     position: absolute;
     top: 0; right: 0;
@@ -37,9 +37,15 @@
     position: absolute;
     top: 0; right: 0;
     left: 0; bottom: 0;
-    background-color: #000;
-    opacity: 0.6;
+    background-color: rgba(0,0,0,0.5);
     cursor: default;
+    opacity: 0;
+    transition:500ms ease all;
+    pointer-events: none;
+
+    .vjs-chromecast-casting & {
+      opacity: 1;
+    }
 
     .casting-information {
       position: absolute;
@@ -58,11 +64,16 @@
       }
 
       .casting-description {
-        height: 50px;
+        height: 70px;
         font-size: 20px;
         line-height: 20px;
 
         small { font-size: 11px }
+
+        .casting-subtext {
+          font-size: 10px;
+          text-transform: uppercase;
+        }
       }
     }
   }

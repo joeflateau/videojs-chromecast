@@ -4,21 +4,21 @@
     <title>Demo - VideoJS Chromecast Plugin</title>
 
     <!-- stylesheets -->
-    <link href="video-js.css" rel="stylesheet" type="text/css">
+    <link href="http://vjs.zencdn.net/5.4.4/video-js.css" rel="stylesheet" type="text/css">
     <link href="../dist/videojs.chromecast.css" rel="stylesheet" type="text/css">
 
     <!-- javascripts -->
     <script src="http://www.gstatic.com/cv/js/sender/v1/cast_sender.js"></script>
 
-    <script src="video.dev.js"></script>
+    <script src="http://vjs.zencdn.net/5.4.4/video.js"></script>
+    <script src="videojs.hls.js"></script>
     <script src="../dist/videojs.chromecast.js"></script>
   </head>
   <body>
     <video id="demo_player" class="video-js vjs-default-skin" controls preload="auto" width="640" height="360"
-        poster="http://video-js.zencoder.com/oceans-clip.png"
+        poster="http://edge.sidearmstreaming.com/syr_1/e553e595-2400-49d8-91ac-356322c79faf/thumbs/thumbnail_latest.jpg"
         data-setup="{}">
-      <source src="http://video-js.zencoder.com/oceans-clip.mp4" type="video/mp4">
-      <source src="http://video-js.zencoder.com/oceans-clip.webm" type="video/webm">
+      <source src="http://edge.sidearmstreaming.com/syr_1/e553e595-2400-49d8-91ac-356322c79faf/2500/playlist.m3u8" type="application/vnd.apple.mpegURL">
       <p class="vjs-no-js">To view this video please enable JavaScript, and consider upgrading to a web browser that <a href="http://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a></p>
     </video>
 
@@ -29,8 +29,8 @@
           chromecast: {
             appId: undefined,
             metadata: {
-              title: "Title",
-              subtitle: "Subtitle"
+              title: "This is the Title",
+              subtitle: "This is the Subtitle"
             }
           }
         }
